@@ -3,7 +3,7 @@
 import numpy as np
 
 
-# This file has two classes, one for the "world" and one for the "sensors"
+# This file has three classes, one for the "world", one for the "sensors", and one for belief (the actual Bayes equation)
 #    This may be a bit overkill for this assignment, but we'll be using this general structure over
 #. and over again, so might as well become familiar with it now.
 #  World class keeps track of the "ground truth" of the world
@@ -11,20 +11,25 @@ import numpy as np
 #  it also handles the robot "opening" and "closing the door"
 #.     - probabilities of the robot successfully opening/closing the door
 #
-#. And sensor queries: Ask the sensor if the door is "open"
+#. And sensor queries: When you ask the sensor if the door is "open", it has to check if the door is open
 # 
 #  Sensor class handles generating "True/False" queries. The sensor class has access to the World class
 #   so it can know the "ground truth" (if the door is ACTUALLY open or closed)
+#
+# The BeliefAboutDoor class handles tracking if you believe the door is open or closed (probabilities)
 
-# GUIDE: The GUIDES are labeled with part 1 through part 3; you don't need to do it all at once
+# GUIDE: The GUIDES are labeled with part 1 through part 4; you don't need to do it all at once
 #. Also make sure to look for GUIDES/part in all of the classes
+#
+
+# SLIDES: https://docs.google.com/presentation/d/10joxdTeM7WvGhVDsHldWbn3c-eW4ea0pdXaAmFn9bWE/edit?usp=sharing
 
 
 class DoorGroundTruth:
     # Define the actions the robot can take
     #   Defined both as a text string and as a number
     #. You can access this variable as DoorGroundTruth.actions
-    actions = {"Open": 0, "Close": 1}
+    actions = {"Opening": 0, "Closing": 1}
 
     def __init__(self, door_open_state: bool):
         """Create a door that can be opened and closed
@@ -47,14 +52,14 @@ class DoorGroundTruth:
            the given action
            This is filling in the transition table 
         @param door_initial_state : boolean, if True, door started open
-        @param action : one of "Open" or "closed" - action the robot took
+        @param action : one of "Opening" or "Closing" - action the robot took
         @param door_final_state : boolean, if True the door ends open
         @param prob - probability that the door will end in the given state, given the starting state and the action"""
 
         # Probability values are always between 0 and 1
         assert 0.0 <= prob <= 1.0
 
-        # Action is one of "Open" or "closed" (checks the dictionary)
+        # Action is one of "Opening" or "Closing" (checks the dictionary)
         assert action in DoorGroundTruth.actions
 
         # GUIDE: Part 3: Update your transition table
@@ -68,7 +73,7 @@ class DoorGroundTruth:
 
     def robot_tries_to_open_door(self):
         """ The robot tries (once) to open the door, and succeeds (or fails) based on the probabilities in
-        your transition table, the starting state, and the action (Open)
+        your transition table, the starting state, and the action (Opening)
         @ return the new state of the door"""
 
         # GUIDE:  Part 3: 
@@ -204,7 +209,6 @@ def test_combo(prob_true_if_open: float, prob_false_if_closed: float):
 
     return True
 
-
 if __name__ == '__main__':
 
     # GUIDE: These are the tests; they're the same ones as in the jupyter notebook
@@ -235,8 +239,9 @@ if __name__ == '__main__':
 
     print("Part 2 passed")
 
-    # Part 3: Check actions.
-    n_samples = 100
+    # Part 3: Check actions
+    #. See JN if you want to do just one of these checks
+    n_samples = 200
     b_ret = True
     for door_start_state in [True, False]:
         for action in DoorGroundTruth.actions:
@@ -249,7 +254,7 @@ if __name__ == '__main__':
                                                 action=action,
                                                 door_final_state=door_end_state,
                                                 prob=prob)
-                        if action == "Open":
+                        if action == "Opening":
                             my_door.robot_tries_to_open_door()
                         else:
                             my_door.robot_tries_to_close_door()
@@ -263,3 +268,42 @@ if __name__ == '__main__':
                         b_ret = False
     assert b_ret
     print(f"Part 3 passed")
+
+    # Part 4 - GUIDE: fill in the methods for BeliefAboutDoor class
+    #. Side note - this only checks the values for the slides in class. It does not check
+    #.  that you correctly update the belief if the door sensor returns false or you open the door instead....
+    belief = BeliefAboutDoor()
+
+    assert np.isclose(belief.is_open_belief(), 0.5)
+    assert np.isclose(belief.is_closed_belief(), 0.5)
+
+    # Example from slides
+    door_sensor1 = DoorSensor()
+    door_sensor1.set_return_true_if_open_probability(0.6)
+    door_sensor1.set_return_false_if_closed_probability(0.7)
+    
+    # Update with first sensor
+    belief.update_belief_sensor(door_sensor1, True)
+    assert np.isclose(belief.is_open_belief(), 2.0 / 3.0)
+    assert np.isclose(belief.is_closed_belief(), 1.0 / 3.0)
+
+    door_sensor2 = DoorSensor()
+    door_sensor2.set_return_true_if_open_probability(0.5)
+    door_sensor2.set_return_false_if_closed_probability(0.4)
+
+    belief.update_belief_sensor(door_sensor2, True)
+    assert np.isclose(belief.is_open_belief(), 5.0 / 8.0)
+    assert np.isclose(belief.is_closed_belief(), 3.0 / 8.0)
+
+    # Now take the action
+    door_example_probs = DoorGroundTruth(True)
+    # Sets two of the arrows for closing the door - the other two
+    #.  should be set by taking 1.0 - x in your code
+    door_example_probs.set_probability(True, "Closing", True, 0.1)
+    door_example_probs.set_probability(False, "Closing", False, 1.0)
+
+    belief.update_belief_action(door_example_probs, "Closed")
+    assert np.isclose(belief.is_open_belief(), 1.0 / 16.0)
+    assert np.isclose(belief.is_closed_belief(), 15.0 / 16.0)
+
+    
