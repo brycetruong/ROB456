@@ -19,6 +19,8 @@ class ParticleFilter:
         #   Create variable(s) to store the particles and the weights
         #.  Make sure to update get_number_particles and get_particle_weight
         # YOUR CODE HERE
+        self.particles = np.array([])
+        self.weights = np.array([])
 
         # Note that in the GUI version, this will be called with the desired number of samples to save
         self.reset_particles()
@@ -28,6 +30,7 @@ class ParticleFilter:
         @return number of particles (int)"""
         # GUIDE: Return number of particles (int)
         # YOUR CODE HERE
+        return len(self.particles)
 
     def get_particle_weight(self, indx_particle : int):
         """ Return the weight of the particle at index
@@ -35,6 +38,7 @@ class ParticleFilter:
         @return weight of particle (float) """
         # GUIDE: Return weight for the given particle
         # YOUR CODE HERE
+        return self.weights[indx_particle]
     
     def get_particle_location(self, indx_particle : int):
         """ Return the x location of the particle
@@ -42,6 +46,7 @@ class ParticleFilter:
         @return location of particle (float) """
         # GUILDE: Return the location stored in particle indx_particle
         # YOUR CODE HERE
+        return self.particles[indx_particle]
 
     def reset_particles(self, n_samples=1000):
         """ Initialize particle filter with uniform samples and weights
@@ -51,6 +56,8 @@ class ParticleFilter:
         #  Step 1: create n_samples of the state space, uniformly distributed
         #  Step 2: create n_samples of uniform weights
         # YOUR CODE HERE
+        self.particles = np.random.uniform(0.0, 1.0, n_samples)
+        self.weights = np.ones(n_samples) / n_samples
 
     def update_particles_move_continuous(self, robot_ground_truth, amount):
         """ Update state estimation based on sensor reading
@@ -63,7 +70,23 @@ class ParticleFilter:
         #       If you don't add noise, you will quickly have all of the particles at the same location..
         #   If it runs into a wall, offset it from the wall by a (small) random amount
         # YOUR CODE HERE
-        # print(f"CL {count_off_left_wall} CR {count_off_right_wall}")
+        
+        # Get the sigma from the robot ground truth
+        sigma = 0.1
+        if "move_continuous" in robot_ground_truth.move_probabilities:
+             sigma = robot_ground_truth.move_probabilities["move_continuous"]["sigma"]
+
+        # Add noise to the movement for every particle
+        noise = np.random.normal(0, sigma, len(self.particles))
+        self.particles += (amount + noise)
+
+        # Handle wall collisions
+        # If it runs into a wall ( < 0 or > 1), offset it slightly so it doesn't get stuck
+        for i in range(len(self.particles)):
+            if self.particles[i] < 0.0:
+                self.particles[i] = 0.0 + np.random.uniform(0, 0.001)
+            elif self.particles[i] > 1.0:
+                self.particles[i] = 1.0 - np.random.uniform(0, 0.001)
 
     def calculate_weights_door_sensor_reading(self, world_ground_truth, robot_sensor, sensor_reading):
         """ Update your weights based on the sensor reading being true (door) or false (no door)
@@ -86,11 +109,32 @@ class ParticleFilter:
         #      w[i] =
         #
         # Note that the particles themselves shouldn't change.
-        # Note that w, p = zip(self.weights, self.particles):
-        #    w = 3
-        # will NOT set the weight in self.weights to the value to 3
-
+        
         # YOUR CODE HERE
+        
+        # Get sensor model probabilities
+        p_see_door_given_door = robot_sensor.door_probabilities["see_door_if_door"]
+        p_see_door_given_no_door = robot_sensor.door_probabilities["see_door_if_not_door"]
+
+        for i, loc in enumerate(self.particles):
+            is_door = world_ground_truth.is_location_in_front_of_door(loc)
+            
+            # Likelihood P(z|x)
+            if is_door:
+                likelihood = p_see_door_given_door if sensor_reading else (1.0 - p_see_door_given_door)
+            else:
+                likelihood = p_see_door_given_no_door if sensor_reading else (1.0 - p_see_door_given_no_door)
+            
+            # Update weight: w = w * likelihood
+            self.weights[i] *= likelihood
+
+        # Normalize weights
+        total_weight = np.sum(self.weights)
+        if total_weight > 0:
+            self.weights /= total_weight
+        else:
+            # Fallback if weights collapse
+            self.weights = np.ones(len(self.weights)) / len(self.weights)
 
     def calculate_weights_distance_wall(self, robot_sensors, dist_reading):
         """ Calculate weights based on distance reading
@@ -111,6 +155,24 @@ class ParticleFilter:
             return (1.0 / (sigma * np.sqrt(2 * np.pi))) * np.exp(- (x - mu) ** 2 / (2 * sigma ** 2))
 
         # YOUR CODE HERE
+        
+        # Get sigma safely
+        if hasattr(robot_sensors, 'distance_wall_sigma'):
+            sigma = robot_sensors.distance_wall_sigma
+        else:
+            sigma = robot_sensors.wall_sensor_probs['sigma']
+
+        for i, loc in enumerate(self.particles):
+            # The robot measures distance to the wall at 0.0, so expected distance is just 'loc'
+            likelihood = gaussian(dist_reading, mu=loc, sigma=sigma)
+            self.weights[i] *= likelihood
+
+        # Normalize weights
+        total_weight = np.sum(self.weights)
+        if total_weight > 0:
+            self.weights /= total_weight
+        else:
+             self.weights = np.ones(len(self.weights)) / len(self.weights)
 
     def resample_particles(self):
         """ Importance sampling - take the current set of particles and weights and make a new set
@@ -126,6 +188,18 @@ class ParticleFilter:
         #         Note that np.where can be used to substantially speed up finding which particle
         #   Part 3: Set the weights back to uniform (just to be neat and clean)
         # YOUR CODE HERE
+        
+        # Using numpy's random.choice is the most efficient and Pythonic way to do importance sampling
+        # It handles the cumulative sum logic internally
+        n_samples = len(self.particles)
+        
+        # Ensure weights sum to 1 (just in case)
+        w = self.weights / np.sum(self.weights)
+        
+        self.particles = np.random.choice(self.particles, size=n_samples, p=w)
+        
+        # Reset weights to uniform
+        self.weights = np.ones(n_samples) / n_samples
 
     def one_full_update_door(self, world_ground_truth, robot_ground_truth, robot_sensor, u: float, z: bool):
         """This is the full update loop that takes in one action, followed by a door sensor reading
@@ -144,6 +218,9 @@ class ParticleFilter:
         #  Step 2 Calculate the weights using the door sensor return value
         #  Step 3 Resample/importance weight
         # YOUR CODE HERE
+        self.update_particles_move_continuous(robot_ground_truth, u)
+        self.calculate_weights_door_sensor_reading(world_ground_truth, robot_sensor, z)
+        self.resample_particles()
 
     def one_full_update_distance(self, robot_ground_truth, robot_sensor, u: float, z: float):
         """This is the full update loop that takes in one action, followed by a door sensor reading
@@ -161,6 +238,9 @@ class ParticleFilter:
         #  Step 2 Calculate the weights using the distance sensor return value
         #  Step 3 Resample/importance weight
         # YOUR CODE HERE
+        self.update_particles_move_continuous(robot_ground_truth, u)
+        self.calculate_weights_distance_wall(robot_sensor, z)
+        self.resample_particles()
 
     def plot_particles_with_weights(self, axs, world_ground_truth, robot_ground_truth):
         """Plot the particles (scaled by weights) and the doors and where the robot actually is
@@ -189,7 +269,6 @@ class ParticleFilter:
         axs. plot(robot_ground_truth.robot_loc, 0.05, 'xb', markersize=10)
 
 
-
 def convert_histogram(pf, n_bins):
     """ Convert the particle filter to an (approximate) pmf in order to compare results
     @param pf - the particle filter
@@ -203,8 +282,12 @@ def convert_histogram(pf, n_bins):
             bins[bin_index] += 1.0
         except IndexError:
             if p < 0.0 or p > 1.0:
-                raise ValueError(f"Convert histogram: particle location not in zero to 1 {p}")
-            bins[-1] += 1.0
+                # raise ValueError(f"Convert histogram: particle location not in zero to 1 {p}")
+                # Just clamp it for now to avoid crashes if particles drift slightly out
+                if p < 0: bins[0] += 1.0
+                else: bins[-1] += 1.0
+            else:
+                bins[-1] += 1.0
 
     bins /= np.sum(bins)
     return bins

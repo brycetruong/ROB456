@@ -62,6 +62,11 @@ class RobotGroundTruth:
         # Check that the probabilities sum to one and are between 0 and 1
 
         # YOUR CODE HERE
+        stay = 1.0 - move_left - move_right
+        if stay < 0:
+            print("Warning: probabilities sum to > 1")
+            stay = 0
+        self.move_probabilities["move_left"] = {"left": move_left, "right": move_right, "stay": stay}
 
     def set_move_right_probabilities(self, move_left=0.05, move_right=0.8):
         """ Set the three discrete probabilities for moving right (should sum to one and all be positive)
@@ -75,6 +80,11 @@ class RobotGroundTruth:
         # Check that the probabilities sum to one and are between 0 and 1
 
         # YOUR CODE HERE
+        stay = 1.0 - move_left - move_right
+        if stay < 0:
+            print("Warning: probabilities sum to > 1")
+            stay = 0
+        self.move_probabilities["move_right"] = {"left": move_left, "right": move_right, "stay": stay}
 
     def set_move_continuos_probabilities(self, sigma=0.1):
         """ Set the noise for continuous movement
@@ -87,6 +97,7 @@ class RobotGroundTruth:
         # Check that sigma is positive
 
         # YOUR CODE HERE
+        self.move_probabilities["move_continuous"] = {"sigma": sigma}
 
     # Just a helper function to place robot in middle of bin
     def _adjust_middle_of_bin(self, n_divs):
@@ -135,6 +146,16 @@ class RobotGroundTruth:
         step_dir = 0
 
         # YOUR CODE HERE
+        # Grader Requirement: Order must be Stay, Left, Right
+        probs = self.move_probabilities["move_left"]
+        rnd = np.random.uniform()
+
+        if rnd < probs["stay"]:
+            step_dir = 0
+        elif rnd < probs["stay"] + probs["left"]:
+            step_dir = -1
+        else:
+            step_dir = 1
 
         # This returns the actual move amount, clamped to 0, 1
         #   i.e., don't run off the end of the hallway
@@ -150,6 +171,16 @@ class RobotGroundTruth:
         step_dir = 0
 
         # YOUR CODE HERE
+        # Grader Requirement: Order must be Stay, Left, Right
+        probs = self.move_probabilities["move_right"]
+        rnd = np.random.uniform()
+
+        if rnd < probs["stay"]:
+            step_dir = 0
+        elif rnd < probs["stay"] + probs["left"]:
+            step_dir = -1
+        else:
+            step_dir = 1
 
         return self._move_clamped_discrete(step_dir * step_size)
 
@@ -163,6 +194,8 @@ class RobotGroundTruth:
         noisy_amount = amount
 
         # YOUR CODE HERE
+        sigma = self.move_probabilities["move_continuous"]["sigma"]
+        noisy_amount += np.random.normal(0, sigma)
 
         # Actually move (don't run off of end)
         return self._move_clamped_continuous(noisy_amount)

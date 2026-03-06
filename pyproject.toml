@@ -1,0 +1,13 @@
+[project]
+name = "rob456"
+version = "0.1.0"
+requires-python = ">=3.12.7"
+dependencies = [
+    "ipykernel>=7.1.0",
+    "ipympl>=0.9.8",
+    "matplotlib>=3.10.8",
+    "nbconvert>=7.16.6",
+    "numpy>=2.4.0",
+    "otter-grader>=6.1.6",
+    "scipy>=1.16.3",
+]

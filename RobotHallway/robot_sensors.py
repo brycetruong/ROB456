@@ -23,6 +23,8 @@ class RobotSensors:
 
         # GUIDE: Create the variable to store the probabilities
         # YOUR CODE HERE
+        self.door_probabilities = {}
+        self.distance_wall_sigma = 0.1
 
         # In the GUI version, these will be called with values from the GUI after the RobotSensors instance
         #   has been created
@@ -40,6 +42,8 @@ class RobotSensors:
         #  Reminder: You should have created the variable to hold these values in the __init__ method above
         #  Second note: all variables should be referenced with self.
         # YOUR CODE HERE
+        self.door_probabilities["see_door_if_door"] = in_prob_see_door_if_door
+        self.door_probabilities["see_door_if_not_door"] = in_prob_see_door_if_not_door
 
     def set_distance_wall_sensor_probabilities(self, sigma=0.1):
         """ Setup the wall sensor probabilities (store them in the dictionary)
@@ -49,6 +53,7 @@ class RobotSensors:
         # Kalman and particle filter assignment
         # GUIDE: Store the Gaussian (reminder, mean for location is zero)
         # YOUR CODE HERE
+        self.distance_wall_sigma = sigma
 
     def query_door(self, robot_gt:RobotGroundTruth, world_gt:WorldGroundTruth):
         """ Query the door sensor
@@ -72,6 +77,10 @@ class RobotSensors:
         # Note: Step 2 is just the sample_boolean code from your probabilities assignment
         
         # YOUR CODE HERE
+        if is_in_front_of_door:
+            return np.random.uniform() < self.door_probabilities["see_door_if_door"]
+        else:
+            return np.random.uniform() < self.door_probabilities["see_door_if_not_door"]
 
     def query_distance_to_wall(self, robot_gt: RobotGroundTruth):
         """ Return a distance reading (with correct noise) of the robot's location
@@ -84,6 +93,7 @@ class RobotSensors:
         # GUIDE: Return the distance to the wall (with noise)
         #  This is the Gaussian assignment from your probabilities homework
         # YOUR CODE HERE
+        return robot_gt.robot_loc + np.random.normal(0, self.distance_wall_sigma)
 
 
 def test_discrete_sensors(b_print=True):
