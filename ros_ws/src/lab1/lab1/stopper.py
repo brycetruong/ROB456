@@ -58,6 +58,7 @@ class MyStopper(Node):
 		# Use angle min, max, and number of readings to calculate the theta value for each scan
 		# This should be a numpy array of length num_readings, that starts at angle_min and ends at angle_max
   # YOUR CODE HERE
+		theta_array = np.linspace(angle_min, angle_max, num_readings)
 
 		# GUIDE: Determine what the closest obstacle/reading is for scans in front of the robot
 		#  Step 1: Determine which of the range readings correspond to being "in front of" the robot (see comment at top)
@@ -84,7 +85,37 @@ class MyStopper(Node):
 
 		shortest = 0
 		max_speed = 0.2
-  # YOUR CODE HERE
+		ranges = []
+		for i in range(0, num_readings):
+			y = scan.ranges[i] * np.sin(theta_array[i])
+			if abs(y) <= 0.19:
+				ranges.append(scan.ranges[i])
+		shortest = np.min(ranges)
+		if shortest <= 1.0:
+			t.twist.linear.x = 0.0
+		else:
+			t.twist.linear.x = max_speed * np.tanh(shortest - 1.0)
+  		# YOUR CODE HERE
+		
+
+		for i in range(0, num_readings):
+			r = scan.ranges[i]
+			theta = theta_array[i]
+
+			y = r*np.sin(theta)
+			x = r*np.cos(theta)
+
+			if abs(y) < 0.19:
+				if x > 0:
+					if r < shortest:
+						shortest = r
+
+		if shortest == float("inf"):
+			t.twist.linear.x = max_speed
+		elif shortest <= 1.0:
+			t.twist.linear.x = 0.0
+		else:
+			t.twist.linear.x = max_speed*np.tanh(shortest - 1.0)
 
 		# Send the command to the robot.
 		self.pub.publish(t)
