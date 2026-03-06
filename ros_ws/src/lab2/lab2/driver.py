@@ -196,7 +196,8 @@ class Lab3Driver(Node):
 		@ return true/false """
 
   # YOUR CODE HERE
-		return False
+		target_distance = self.distance_to_target()
+		return target_distance < self.threshold
 
 	def distance_to_target(self):
 		""" Communicate with send points - set to distance to target"""
@@ -337,6 +338,41 @@ class Lab3Driver(Node):
 		# GUIDE: Use this method to collect obstacle information - is something in front of, to the left, or to 
 		# the right of the robot? Start with your stopper code from Lab1
   # YOUR CODE HERE
+		angle_min = scan.angle_min
+		angle_max = scan.angle_max
+		num_readings = len(scan.ranges)
+		
+		theta_array = np.linspace(angle_min, angle_max, num_readings)
+
+		front = []
+		left = []
+		right = []
+
+		for i in range(0, num_readings):
+			y = scan.ranges[i] * np.sin(theta_array[i])
+			if y > 0.19:
+				right.append(scan.ranges[i])
+			elif y < -0.19:
+				left.append(scan.ranges[i])
+			else:
+				front.append(scan.ranges[i])
+		
+		front_shortest = np.min(front) if front else float("inf")
+		left_shortest = np.min(left) if left else float("inf")
+		right_shortest = np.min(right) if right else float("inf")
+		
+		if front_shortest < self.threshold + 0.3:
+			if left_shortest > right_shortest:
+				return True, 0.0, -np.pi/2
+			else:
+				return True, 0.0, np.pi/2
+		
+		if left_shortest < self.threshold + 0.3:
+			return True, 0.0, np.pi/8
+
+		if right_shortest < self.threshold + 0.3:
+			return True, 0.0, -np.pi/8
+		
 		return False, 0.0, 0.0
 
 	def get_twist(self, scan):
@@ -362,6 +398,35 @@ class Lab3Driver(Node):
 
   # YOUR CODE HERE
 
+		# Obstacle Checks
+		in_front_of_obstacle, obstacle_speed, obstacle_turn = self.get_obstacle(scan)
+
+		if in_front_of_obstacle:
+			t.twist.linear.x = obstacle_speed
+			t.twist.angular.z = obstacle_turn
+			return t
+		
+		angle_to_target = atan2(self.target.point.y, self.target.point.x)		
+		
+		# Close enough Checks
+		if self.close_enough():
+			t.twist.linear.x = 0.0
+			t.twist.angular.z = 0.0
+			return t
+		
+		t.twist.linear.x = max_speed * np.tanh(self.distance_to_target())
+		if t.twist.linear.x < min_speed:
+			t.twist.linear.x = min_speed
+		
+		if angle_to_target > max_turn:
+			turn = max_turn
+		elif angle_to_target < -max_turn:
+			turn = -max_turn
+		else:
+			turn = angle_to_target
+		
+		t.twist.angular.z = turn
+
 		# t.twist.linear.x = max_speed
 		# t.twist.angular.z = 0.0
 		if self.print_twist_messages:
@@ -382,7 +447,7 @@ def main(args=None):
 	driver = Lab3Driver()
 
 	# Multi-threaded execution
-	executor = MultiThreadedExecutor()
+	executor = MultiThreadedExecutor(num_threads = 2)
 	executor.add_node(driver)
 	executor.spin()
 	
