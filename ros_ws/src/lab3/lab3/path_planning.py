@@ -187,27 +187,61 @@ def dijkstra(im, robot_loc=(0, 0), goal_loc=(0, 0)):
         visited_parent = visited_triplet[1]         # Second value is the parent node of this one
         visited_closed_yn = visited_triplet[2]      # Third value is if this node is closed y/n
 
-        # GUIDE
-        #  Step 1: Break out of the loop if current_node_ij is the goal node
-        #  Step 2: If this node is closed, skip it
-        #  Step 3: Set the node to closed
-        #    Now do the instructions from the slide (the actual algorithm)
-        #  See also lecture slides
-        # YOUR CODE HERE
+        # Step 1: Break out of the loop if current_node_ij is the goal node
+        if current_node_ij == goal_loc:
+            break
+
+        # Step 2: If this node is closed, skip it
+        if visited_closed_yn:
+            continue
+
+        # Step 3: Set the node to closed
+        visited[current_node_ij] = (visited_distance, visited_parent, True)
+
+        # Explore neighbors using eight_connected
+        for neighbor in eight_connected(current_node_ij):
+            # Check bounds
+            if not (0 <= neighbor[0] < im.shape[1] and 0 <= neighbor[1] < im.shape[0]):
+                continue
+            # Only consider free pixels
+            if not is_free(im, neighbor):
+                continue
+
+            # Calculate edge weight: sqrt(2) for diagonal, 1 for cardinal
+            dx = abs(neighbor[0] - current_node_ij[0])
+            dy = abs(neighbor[1] - current_node_ij[1])
+            if dx + dy == 2:
+                edge_weight = np.sqrt(2)
+            else:
+                edge_weight = 1.0
+
+            new_distance = visited_distance + edge_weight
+
+            # If neighbor not visited yet, or we found a shorter path (and it's not closed)
+            if neighbor not in visited or (not visited[neighbor][2] and new_distance < visited[neighbor][0]):
+                visited[neighbor] = (new_distance, current_node_ij, False)
+                heapq.heappush(priority_queue, (new_distance, neighbor))
 
     # Now check that we actually found the goal node
-    if not goal_loc in visited:
-        print(f"Goal {goal_loc} not reached, taking closest")
-
-        # GUIDE: Deal with not being able to get to the goal loc
-        #   If the goal location is not reachable, find the node closest to the goal 
-        #.  and return the path to it - you'll want this for the ROS 2 assignment
-        # YOUR CODE HERE
+    if goal_loc not in visited:
+        # Goal not reachable - find the closest visited node to the goal
+        closest_node = None
+        closest_dist = float('inf')
+        for node in visited:
+            dist = np.sqrt((node[0] - goal_loc[0])**2 + (node[1] - goal_loc[1])**2)
+            if dist < closest_dist:
+                closest_dist = dist
+                closest_node = node
+        goal_loc = closest_node
 
     path = []
     path.append(goal_loc)
-    # GUIDE: Build the path by starting at the goal node and working backwards
-    # YOUR CODE HERE
+    # Build the path by starting at the goal node and working backwards
+    current = goal_loc
+    while visited[current][1] is not None:
+        current = visited[current][1]
+        path.append(current)
+    path.reverse()
 
     return path
 
@@ -228,7 +262,7 @@ def open_image(im_name):
               "Assignments/Data/" + im_name, 
               "Skills/Data/" + im_name,
               "../../../../Skills/Data/" + im_name,
-              "../../../../Assignments/Data" + im_name,
+              "../../../../Assignments/Data/" + im_name,
               ]
     im = None
     print(f"{os.getcwd()}")
