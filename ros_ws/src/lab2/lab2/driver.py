@@ -10,6 +10,7 @@
 # ROS2 stuff, and Node is the class we're going to use to set up the node.
 import rclpy
 from rclpy.node import Node
+import time
 
 # Velocity commands are given with Twist messages, from geometry_msgs
 from geometry_msgs.msg import Twist, PoseStamped
@@ -101,7 +102,9 @@ class Lab3Driver(Node):
 		self.target.point.y = 0.0
 
 		# GUIDE: Declare any variables here
-  # YOUR CODE HERE
+		# Track the closest distance we've achieved to the current goal.
+		# Used to detect if we're making progress or oscillating.
+		self.best_distance_so_far = float('inf')
 
 		# Timer to make sure we publish the target marker (once we get a goal)
 		self.marker_timer = self.create_timer(1.0, self._marker_callback)
@@ -197,7 +200,19 @@ class Lab3Driver(Node):
 
   # YOUR CODE HERE
 		target_distance = self.distance_to_target()
-		return target_distance < self.threshold
+
+		# Track the closest we've gotten to this goal — useful for stuck detection
+		if target_distance < self.best_distance_so_far:
+			self.best_distance_so_far = target_distance
+
+		# Check if we're within the acceptable threshold
+		if target_distance < self.threshold:
+			self.get_logger().info(
+				f"Close enough! Distance {target_distance:.3f}m < threshold {self.threshold:.3f}m"
+			)
+			return True
+
+		return False
 
 	def distance_to_target(self):
 		""" Communicate with send points - set to distance to target"""
@@ -220,8 +235,14 @@ class Lab3Driver(Node):
 		result = NavTarget.Result()
 		result.success = False
 
+		# Reset tracking for the new goal
+		self.best_distance_so_far = float('inf')
+
 		# Reset target
 		self.set_target()
+
+		# Track last time we made progress
+		last_progress_time = time.time()
 
 		# Keep publishing feedback, then sleeping (so the laser scan can happen)
 		# GUIDE: If you aren't making progress, stop the while loop and mark the goal as failed
@@ -232,8 +253,39 @@ class Lab3Driver(Node):
 
 				return result
 			
+			current_distance = self.distance_to_target()
+			
+			# If we've made significant progress (e.g. 5 cm closer to the target)
+			if current_distance < self.best_distance_so_far - 0.05:
+				self.best_distance_so_far = current_distance
+				last_progress_time = time.time()
+			# If we haven't made progress in the last 8 seconds, consider the robot stuck
+			elif time.time() - last_progress_time > 8.0:
+				self.get_logger().warn(f"Stuck! No progress for 8 seconds. Distance: {current_distance:.2f}. Backing up...")
+				
+				# Back up slightly
+				backup_cmd = self.zero_twist()
+				backup_cmd.twist.linear.x = -0.15 # Move backwards at 0.15 m/s
+				
+				# Send the backup command and sleep for a few seconds to let it move
+				for _ in range(4): # 2 seconds of backing up (4 * 0.5s)
+					self.cmd_pub.publish(backup_cmd)
+					time.sleep(0.5)
+					
+				# Stop the robot after backing up
+				self.cmd_pub.publish(self.zero_twist())
+				
+				self.get_logger().info("Finished backing up. Failing current goal to skip or re-request.")
+				
+				# Remove goal and timer, abort the goal, and return failed result
+				self.marker_timer.reset()
+				self.goal = None
+				goal_handle.abort()
+				result.success = False
+				return result
+
 			feedback = NavTarget.Feedback()
-			feedback.distance.data = self.distance_to_target()
+			feedback.distance.data = current_distance
 			
 			# Publish feedback - this gets sent back to send_points
 			goal_handle.publish_feedback(feedback)
@@ -298,7 +350,7 @@ class Lab3Driver(Node):
 		
 		# GUIDE: Calculate any additional variables here
 		#  Remember that the target's location is in its own coordinate frame at 0,0, angle 0 (x-axis)
-  # YOUR CODE HERE
+		# Additional variables calculated if necessary...
 
 		return self.target
 
@@ -361,17 +413,21 @@ class Lab3Driver(Node):
 		left_shortest = np.min(left) if left else float("inf")
 		right_shortest = np.min(right) if right else float("inf")
 		
-		if front_shortest < self.threshold + 0.3:
+		closest_obstacle = min(front_shortest, left_shortest, right_shortest)
+		avoid_speed = 0.2 * np.tanh(closest_obstacle)
+		avoid_speed = max(0.05, avoid_speed)
+				
+		if front_shortest < self.threshold + 0.45:
 			if left_shortest > right_shortest:
-				return True, 0.0, -np.pi/2
+				return True, avoid_speed, -np.pi/24
 			else:
-				return True, 0.0, np.pi/2
+				return True, avoid_speed, np.pi/24
 		
-		if left_shortest < self.threshold + 0.3:
-			return True, 0.0, np.pi/8
+		if left_shortest < self.threshold + 0.45:
+			return True, avoid_speed, np.pi/24
 
-		if right_shortest < self.threshold + 0.3:
-			return True, 0.0, -np.pi/8
+		if right_shortest < self.threshold + 0.45:
+			return True, avoid_speed, -np.pi/24
 		
 		return False, 0.0, 0.0
 
