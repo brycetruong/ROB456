@@ -399,12 +399,10 @@ class SendPoints(Node):
 		@return pt_uv - point in the image"""
 		info = map_msg.info
 
-		im_u = 0
-		im_v = 0
-
 		# GUIDE: Subtract the origin position of the map and then divide by the resolution
 		#   Don't forget to cast to an int
-  # YOUR CODE HERE
+		im_u = int((pt_xy[0] - info.origin.position.x) / info.resolution)
+		im_v = int((pt_xy[1] - info.origin.position.y) / info.resolution)
 		
 		# self.get_logger().info(f"before {pt_xy} after {im_u}, {im_v}")
 		return (im_u, im_v)
@@ -416,10 +414,10 @@ class SendPoints(Node):
 		@return pt_xy - point in the world"""
 		info = map_msg.info
 
-		pt_x = 0.0
-		pt_y = 0.0
-		# GUIDE: Multiply by the resolution then add the origin position of the map 
-  # YOUR CODE HERE
+		# GUIDE: Multiply by the resolution then add the origin position of the map
+		pt_x = (pt_uv[0] * info.resolution) + info.origin.position.x
+		pt_y = (pt_uv[1] * info.resolution) + info.origin.position.y
+		
 		# self.get_logger().info(f"before {pt_uv} after {pt_x}, {pt_y}")
 		return (pt_x, pt_y)
 

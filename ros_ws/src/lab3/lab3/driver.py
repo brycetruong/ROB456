@@ -10,6 +10,7 @@
 # ROS2 stuff, and Node is the class we're going to use to set up the node.
 import rclpy
 from rclpy.node import Node
+import time
 
 # Velocity commands are given with Twist messages, from geometry_msgs
 from geometry_msgs.msg import Twist, PoseStamped
@@ -240,6 +241,9 @@ class Lab3Driver(Node):
 		# Reset target
 		self.set_target()
 
+		# Track last time we made progress
+		last_progress_time = time.time()
+
 		# Keep publishing feedback, then sleeping (so the laser scan can happen)
 		# GUIDE: If you aren't making progress, stop the while loop and mark the goal as failed
 		rate = self.create_rate(0.5)
@@ -249,8 +253,39 @@ class Lab3Driver(Node):
 
 				return result
 			
+			current_distance = self.distance_to_target()
+			
+			# If we've made significant progress (e.g. 5 cm closer to the target)
+			if current_distance < self.best_distance_so_far - 0.05:
+				self.best_distance_so_far = current_distance
+				last_progress_time = time.time()
+			# If we haven't made progress in the last 8 seconds, consider the robot stuck
+			elif time.time() - last_progress_time > 8.0:
+				self.get_logger().warn(f"Stuck! No progress for 8 seconds. Distance: {current_distance:.2f}. Backing up...")
+				
+				# Back up slightly
+				backup_cmd = self.zero_twist()
+				backup_cmd.twist.linear.x = -0.15 # Move backwards at 0.15 m/s
+				
+				# Send the backup command and sleep for a few seconds to let it move
+				for _ in range(4): # 2 seconds of backing up (4 * 0.5s)
+					self.cmd_pub.publish(backup_cmd)
+					time.sleep(0.5)
+					
+				# Stop the robot after backing up
+				self.cmd_pub.publish(self.zero_twist())
+				
+				self.get_logger().info("Finished backing up. Failing current goal to skip or re-request.")
+				
+				# Remove goal and timer, abort the goal, and return failed result
+				self.marker_timer.reset()
+				self.goal = None
+				goal_handle.abort()
+				result.success = False
+				return result
+
 			feedback = NavTarget.Feedback()
-			feedback.distance.data = self.distance_to_target()
+			feedback.distance.data = current_distance
 			
 			# Publish feedback - this gets sent back to send_points
 			goal_handle.publish_feedback(feedback)
@@ -315,7 +350,7 @@ class Lab3Driver(Node):
 		
 		# GUIDE: Calculate any additional variables here
 		#  Remember that the target's location is in its own coordinate frame at 0,0, angle 0 (x-axis)
-  # YOUR CODE HERE
+		# Additional variables calculated if necessary...
 
 		return self.target
 
