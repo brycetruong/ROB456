@@ -29,7 +29,7 @@ from tf2_ros.transform_listener import TransformListener
 from tf2_ros.buffer import Buffer
 
 # Your path planning
-from lab3.path_planning import dijkstra, is_free
+from lab3.path_planning import dijkstra, is_free, eight_connected
 from lab3.exploring import find_all_possible_goals, find_best_point, find_waypoints
 
 
@@ -451,10 +451,29 @@ class SendPoints(Node):
 		self.get_logger().info(f"Robot current location {robot_current_loc_in_map}")
 
 		# GUIDE: Change this to get just the points you might consider looking at and perhaps don't do it every time a map is made
-		all_unseen_pts = find_all_possible_goals(im_thresh)  # Your exploring code
-		reachable_pts = []
-		for p in all_unseen_pts:
-			map_xy = self.from_image_to_map(map_msg=map_msg, pt_uv=p)
+		# Perhaps it doesn't recompute every time a map is made???? 
+		if not self.goal_points or self.completed_all_goals():
+		# Below is the original code for this method which is commented out
+		
+			all_unseen_pts = find_all_possible_goals(im_thresh)  # Your exploring code
+			reachable_pts = []
+		
+		# for p in all_unseen_pts:
+		# 	map_xy = self.from_image_to_map(map_msg=map_msg, pt_uv=p)
+		# 	reachable_pts.append(map_xy)
+		
+		# List of neighbors
+			neighbors = []
+		# Find best point
+			best_point = find_best_point(im_thresh, all_unseen_pts, robot_current_loc_in_image)
+		
+		# Check neighbors and add them if they're free
+		for i in eight_connected(best_point):
+			if is_free(im_thresh, i):
+				neighbors.append(i)
+		
+		for points in neighbors:
+			map_xy = self.from_image_to_map(map_msg=map_msg, pt_uv=points)
 			reachable_pts.append(map_xy)
 
 		# This puts markers in RViz for all unseen points

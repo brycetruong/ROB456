@@ -81,6 +81,8 @@ def convert_x_y_to_pix(im_size, x_y, size_pix):
     @param x_y - tuple with x,y in meters
     @param size_pix - size of pixel in meters
     @return i, j (integers) """
+    # for i in range(0, 2):
+    #     print(f"x_y: {x_y}, x_y[i]: {x_y[i]}, im_size: {im_size}, im_size[1-i]: {im_size[1-i]}")
     pix = [int(x_y[i] * im_size[1-i] / size_pix) for i in range(0, 2)]
 
     if not (0 <= pix[0] <= im_size[1]) or not (0 <= pix[1] <= im_size[0]):
@@ -98,7 +100,18 @@ def is_reachable(im, pix):
     #  False otherwise
     # You can use four or eight connected - eight will return more points
     # YOUR CODE HERE
-    return False
+    unseen_neighbor_count = 0
+    free_neighbor_count = 0
+    free_neighbor_T_F = False
+    if not path_planning.is_wall(im, pix):
+        for adj in path_planning.eight_connected(pix):  # loop through neighbors
+            if 0 <= adj[0] < im.shape[1] and 0 <= adj[1] < im.shape[0]:     # limit to points in the image
+                if path_planning.is_free(im, adj):  # if neighbor is free
+                    free_neighbor_T_F = True
+                    free_neighbor_count += 1
+                elif path_planning.is_unseen(im, adj):  # if neighbor is unseen
+                    unseen_neighbor_count += 1
+    return free_neighbor_T_F, unseen_neighbor_count, free_neighbor_count
 
 
 def find_all_possible_goals(im):
@@ -110,14 +123,41 @@ def find_all_possible_goals(im):
 
     # YOUR CODE HERE
 
+    # Note: im is in (y, x) coordinates
 
-def find_best_point(im, possible_points : list, robot_loc):
+    free_pixles = {}
+    for i, row in enumerate(im):        # change to np.logical_and/np.logical_or
+        for j, v in enumerate(row):
+            if path_planning.is_free(im, (j, i)):   # check if pixel is free
+                reachable, unseen_neighbors, free_neighbors = is_reachable(im, (j, i))
+                if reachable and unseen_neighbors > 3:    # cull to points with more than 3 unseen neighbors (deal with noise)
+                    free_pixles.update({(j, i): (unseen_neighbors, free_neighbors)} )
+
+    return free_pixles
+        
+
+def find_best_point(im, possible_points : dict, robot_loc):
     """ Pick one of the unseen points to go to
     @param im - thresholded image
     @param possible_points - possible points to chose from (list of tuples)
     @param robot_loc - location of the robot (in case you want to factor that in)
     """
     # YOUR CODE HERE
+
+    # loop through possible_points, somehow compare distance from robot, set closest as goal
+    current_best_distance = np.inf  # best distance to keep track of best option
+    current_best_option = None      # Store current best option, update when a better one is found
+
+    if len(possible_points) >= 1:    # End condition. Only path if there is an unseen point to go to
+        for coord in possible_points.keys():
+            if possible_points[coord][1] > 3:   # if number of free neighbors > 3
+                distance = np.sqrt((robot_loc[0] - coord[0])**2 + (robot_loc[1] - coord[1])**2) # linear distance calculation(currently ignores walls)
+                if distance < current_best_distance:
+                    current_best_distance = distance
+                    current_best_option = coord
+        return current_best_option
+    return current_best_option
+
 
 
 def find_waypoints(im, path):
@@ -128,6 +168,35 @@ def find_waypoints(im, path):
 
     # Again, no right answer here
     # YOUR CODE HERE
+    # Check if each point is in a straight line from the previous stored point
+    # If it is not, store the unique point
+    # If it is, don't store it
+
+    def vectorize(a, b):
+        """ Convert tuples into a unit vector"""
+        direction_vector = np.array(b) - np.array(a)    # convert tuples to vector
+        unit_vector = direction_vector / np.linalg.norm(direction_vector)   # convert to unit vector
+        return unit_vector
+    
+    waypoints = []              # blank array to store the new path
+    waypoints.append(path[0])   # add the first point
+    previous_unit_vector = vectorize(path[1], waypoints[-1])
+
+    for i in range(1, len(path)):
+
+        new_unit_vector = vectorize(path[i], waypoints[-1])
+        
+        # u dot v = cos(θ). 
+        # So if θ=0 => cos(0) = 1. 
+        # Use 0.99 instead of 1 to account for rounding errors
+        if np.dot(previous_unit_vector, new_unit_vector) < 0.99:   
+            waypoints.append(path[i])
+            previous_unit_vector = new_unit_vector
+        else:
+            continue
+    waypoints.append(path[-1]) # include goal
+    return waypoints
+    
 
 
 def test_unseen(im, pts):
