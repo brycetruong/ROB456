@@ -219,97 +219,199 @@ class Lab3Driver(Node):
 		return np.sqrt(self.target.point.x ** 2 + self.target.point.y ** 2)
 	
 	# Respond to the action request.
+	# def action_callback(self, goal_handle : ServerGoalHandle):
+	# 	""" This gets called when the new goal is sent by SendPoints
+	# 	@param goal_handle - this has the new goal
+	# 	@return a NavTarget return when done """
+
+	# 	self.get_logger().info(f'Received an execute goal request... {goal_handle.request.goal.point}')
+	
+	# 	# Save the new goal as a stamped point
+	# 	self.goal = PointStamped()
+	# 	self.goal.header = goal_handle.request.goal.header
+	# 	self.goal.point = goal_handle.request.goal.point
+		
+	# 	# Build a result to send back
+	# 	result = NavTarget.Result()
+	# 	result.success = False
+
+	# 	# Reset tracking for the new goal
+	# 	self.best_distance_so_far = float('inf')
+
+	# 	# Reset target
+	# 	self.set_target()
+
+	# 	# Track last time we made progress
+	# 	last_progress_time = time.time()
+
+	# 	# Keep publishing feedback, then sleeping (so the laser scan can happen)
+	# 	# GUIDE: If you aren't making progress, stop the while loop and mark the goal as failed
+	# 	rate = self.create_rate(0.5)
+	# 	while not self.close_enough():
+	# 		if not self.goal:
+	# 			self.get_logger().info(f"Goal was canceled")
+
+	# 			return result
+			
+	# 		current_distance = self.distance_to_target()
+			
+	# 		# If we've made significant progress (e.g. 5 cm closer to the target)
+	# 		if current_distance < self.best_distance_so_far - 0.05:
+	# 			self.best_distance_so_far = current_distance
+	# 			last_progress_time = time.time()
+	# 		# If we haven't made progress in the last 8 seconds, consider the robot stuck
+	# 		elif time.time() - last_progress_time > 8.0:
+	# 			self.get_logger().warn(f"Stuck! No progress for 8 seconds. Distance: {current_distance:.2f}. Backing up...")
+				
+	# 			# Back up slightly
+	# 			backup_cmd = self.zero_twist()
+	# 			backup_cmd.twist.linear.x = -0.15 # Move backwards at 0.15 m/s
+				
+	# 			# Send the backup command and sleep for a few seconds to let it move
+	# 			for _ in range(4): # 2 seconds of backing up (4 * 0.5s)
+	# 				self.cmd_pub.publish(backup_cmd)
+	# 				time.sleep(0.5)
+					
+	# 			# Stop the robot after backing up
+	# 			self.cmd_pub.publish(self.zero_twist())
+				
+	# 			self.get_logger().info("Finished backing up. Failing current goal to skip or re-request.")
+				
+	# 			# Remove goal and timer, abort the goal, and return failed result
+	# 			self.marker_timer.reset()
+	# 			self.goal = None
+	# 			goal_handle.abort()
+	# 			result.success = False
+	# 			return result
+
+	# 		feedback = NavTarget.Feedback()
+	# 		feedback.distance.data = current_distance
+			
+	# 		# Publish feedback - this gets sent back to send_points
+	# 		goal_handle.publish_feedback(feedback)
+
+	# 		# sleep so we can process the next scan
+	# 		rate.sleep()
+			
+	# 	# Timer to make sure we remove the current target
+	# 	self.marker_timer.reset()
+
+	# 	# Don't keep processing goals
+	# 	self.goal = None 
+
+	# 	# Publish the zero twist
+	# 	t = self.zero_twist()
+	# 	self.cmd_pub.publish(t)
+
+	# 	self.get_logger().info(f"Completed goal")
+
+	# 	# Set the succeed value on the handle
+	# 	goal_handle.succeed()
+
+	# 	# Set the result to True and return
+	# 	result.success = True
+	# 	return result
+
+	# Respond to the action request.
+
 	def action_callback(self, goal_handle : ServerGoalHandle):
+
 		""" This gets called when the new goal is sent by SendPoints
+
 		@param goal_handle - this has the new goal
+
 		@return a NavTarget return when done """
 
+
 		self.get_logger().info(f'Received an execute goal request... {goal_handle.request.goal.point}')
+
 	
+
 		# Save the new goal as a stamped point
+
 		self.goal = PointStamped()
+
 		self.goal.header = goal_handle.request.goal.header
+
 		self.goal.point = goal_handle.request.goal.point
+
 		
+
 		# Build a result to send back
+
 		result = NavTarget.Result()
+
 		result.success = False
 
-		# Reset tracking for the new goal
-		self.best_distance_so_far = float('inf')
 
 		# Reset target
+
 		self.set_target()
 
-		# Track last time we made progress
-		last_progress_time = time.time()
 
 		# Keep publishing feedback, then sleeping (so the laser scan can happen)
+
 		# GUIDE: If you aren't making progress, stop the while loop and mark the goal as failed
+
 		rate = self.create_rate(0.5)
+
 		while not self.close_enough():
+
 			if not self.goal:
+
 				self.get_logger().info(f"Goal was canceled")
 
+
 				return result
+
 			
-			current_distance = self.distance_to_target()
-			
-			# If we've made significant progress (e.g. 5 cm closer to the target)
-			if current_distance < self.best_distance_so_far - 0.05:
-				self.best_distance_so_far = current_distance
-				last_progress_time = time.time()
-			# If we haven't made progress in the last 8 seconds, consider the robot stuck
-			elif time.time() - last_progress_time > 8.0:
-				self.get_logger().warn(f"Stuck! No progress for 8 seconds. Distance: {current_distance:.2f}. Backing up...")
-				
-				# Back up slightly
-				backup_cmd = self.zero_twist()
-				backup_cmd.twist.linear.x = -0.15 # Move backwards at 0.15 m/s
-				
-				# Send the backup command and sleep for a few seconds to let it move
-				for _ in range(4): # 2 seconds of backing up (4 * 0.5s)
-					self.cmd_pub.publish(backup_cmd)
-					time.sleep(0.5)
-					
-				# Stop the robot after backing up
-				self.cmd_pub.publish(self.zero_twist())
-				
-				self.get_logger().info("Finished backing up. Failing current goal to skip or re-request.")
-				
-				# Remove goal and timer, abort the goal, and return failed result
-				self.marker_timer.reset()
-				self.goal = None
-				goal_handle.abort()
-				result.success = False
-				return result
 
 			feedback = NavTarget.Feedback()
-			feedback.distance.data = current_distance
+
+			feedback.distance.data = self.distance_to_target()
+
 			
+
 			# Publish feedback - this gets sent back to send_points
+
 			goal_handle.publish_feedback(feedback)
 
+
 			# sleep so we can process the next scan
+
 			rate.sleep()
+
 			
+
 		# Timer to make sure we remove the current target
+
 		self.marker_timer.reset()
 
+
 		# Don't keep processing goals
+
 		self.goal = None 
 
+
 		# Publish the zero twist
+
 		t = self.zero_twist()
+
 		self.cmd_pub.publish(t)
+
 
 		self.get_logger().info(f"Completed goal")
 
+
 		# Set the succeed value on the handle
+
 		goal_handle.succeed()
 
+
 		# Set the result to True and return
+
 		result.success = True
+
 		return result
 
 	def set_target(self):
